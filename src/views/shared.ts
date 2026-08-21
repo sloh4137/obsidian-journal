@@ -108,10 +108,22 @@ function stripFrontmatter(raw: string): string {
 	return after < 0 ? "" : raw.slice(after + 1);
 }
 
-export function entryTitle(file: TFile, prefix: string): string {
-	const skip = (prefix?.length ?? 0) + "YYYY-MM-DD".length;
-	const trimmed = file.basename.slice(skip).trim();
-	return trimmed || file.basename;
+export function entryTitle(file: TFile, prefix?: string): string {
+	let name = file.basename;
+	// Optionally strip a configured prefix (e.g. "Journal ") for backwards compatibility
+	if (prefix && name.startsWith(prefix)) {
+		name = name.slice(prefix.length);
+	}
+	// Spec: take filename, subtract date "YYYY-MM-DD " and use remainder as title
+	const withSpace = name.match(/^\d{4}-\d{2}-\d{2}\s+(.*)$/);
+	if (withSpace) {
+		return (withSpace[1] ?? "").trim();
+	}
+	// Fallback: date without trailing space (e.g. "YYYY-MM-DDTitle" or just date)
+	if (/^\d{4}-\d{2}-\d{2}/.test(name)) {
+		return name.slice(10).trim();
+	}
+	return name;
 }
 
 export async function renderEntryTextBlock(

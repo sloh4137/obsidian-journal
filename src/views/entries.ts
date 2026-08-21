@@ -1,6 +1,7 @@
 import { BasesEntry, BasesView, Component, QueryController } from "obsidian";
 import type JournalPlugin from "../main";
 import {
+	entryTitle,
 	getPhotosForEntry,
 	openEntry,
 	parseEntryDate,
@@ -100,6 +101,14 @@ export class EntriesBasesView extends BasesView {
 		if (date) {
 			const header = card.createDiv({ cls: "journal-entry-card-header" });
 			header.setText(date.format("MMM D, YYYY [|] dddd"));
+		}
+
+		const title = entryTitle(
+			entry.file,
+			this.plugin.settings.journalPrefixProperty
+		);
+		if (title) {
+			card.createDiv({ cls: "journal-entry-card-title", text: title });
 		}
 
 		const body = card.createDiv({ cls: "journal-entry-card-body" });

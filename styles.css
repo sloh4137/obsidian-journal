@@ -80,6 +80,15 @@
 	color: var(--text-normal);
 }
 
+.journal-entry-card-title {
+	font-weight: 600;
+	margin-bottom: 8px;
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .journal-entry-card-body {
 	display: flex;
 	gap: 12px;

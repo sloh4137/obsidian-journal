@@ -10,6 +10,7 @@ tags:
     - "#journal"
 cssclasses:
     - journal
+    - immichBanner
 ---
 
 <%_ await tp.file.rename(tp.date.now("YYYY-MM-DD")) %>
