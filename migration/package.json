@@ -7,11 +7,9 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "convert": "tsx --env-file=.env src/journey-to-obsidian.ts"
+    "convert": "tsx src/journey-to-obsidian.ts"
   },
   "dependencies": {
-    "@immich/sdk": "^2.7.5",
-    "exifr": "^7.1.3",
     "luxon": "^3.7.2",
     "turndown": "^7.2.0",
     "typescript": "^6.0.3"

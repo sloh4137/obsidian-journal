@@ -26,6 +26,9 @@ const SENTIMENT_MAP: Record<string, number> = {
 	"2": 3,
 };
 
+// Characters Obsidian (and most filesystems) disallow in a note file name.
+const INVALID_FILENAME_CHARS = /[*"\\/<>:|?]/;
+
 function parseTimestampFieldWithTimezone(
 	json: JourneyJson,
 	jsonField: keyof JourneyJson,
@@ -38,6 +41,32 @@ function parseTimestampFieldWithTimezone(
 function mapSentiment(json: JourneyJson): number {
 	const value = Math.max(json.mood ?? 0, json.sentiment ?? 0);
 	return SENTIMENT_MAP[String(value)] ?? 0;
+}
+
+function decodeHtmlEntities(value: string): string {
+	return value
+		.replace(/&amp;/g, "&")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;/g, "'")
+		.replace(/&apos;/g, "'")
+		.replace(/&nbsp;/g, " ");
+}
+
+const LEADING_H1 = /^\s*<h1[^>]*>(.*?)<\/h1>/i;
+
+/**
+ * If the body's very first element is an <h1>, return its (decoded) text as the
+ * note title. Otherwise return null so the caller falls back to the date only.
+ */
+function extractH1Title(text: string): string | null {
+	const match = LEADING_H1.exec(text);
+	if (!match) return null;
+	// Strip any nested inline tags, then decode entities.
+	const inner = match[1].replace(/<[^>]+>/g, "");
+	const title = decodeHtmlEntities(inner).trim();
+	return title.length > 0 ? title : null;
 }
 
 function buildFrontmatter(json: JourneyJson): string {
@@ -93,34 +122,55 @@ async function fileExists(filePath: string): Promise<boolean> {
 	}
 }
 
+/**
+ * Convert a single entry. Returns the offending base name if it contains
+ * characters that are invalid in a filename (in which case nothing is written),
+ * or null on success.
+ */
 async function convertEntry(
 	jsonPath: string,
 	outputDir: string,
 	turndown: TurndownService
-): Promise<void> {
+): Promise<string | null> {
 	const raw = await fs.readFile(jsonPath, "utf8");
 	const json: JourneyJson = JSON.parse(raw);
 
-	const baseName = parseTimestampFieldWithTimezone(
+	const dateStr = parseTimestampFieldWithTimezone(
 		json,
 		"date_journal",
 		"yyyy-LL-dd"
 	);
+	const title = extractH1Title(json.text ?? "");
+	let baseName = title ? `${dateStr} ${title}` : dateStr;
+
+	// Colons are invalid in filenames: "1:1" reads better as "1-1"; any other
+	// colon becomes ")".
+	baseName = baseName.replace(/1:1/g, "1-1").replace(/:/g, ")");
+
+	if (INVALID_FILENAME_CHARS.test(baseName)) {
+		return baseName;
+	}
+
 	const outputPath = await resolveOutputPath(outputDir, baseName);
 
+	// When the leading <h1> becomes the note title, drop it from the body so it
+	// isn't duplicated.
+	const bodyHtml = title ? (json.text ?? "").replace(LEADING_H1, "") : json.text ?? "";
+
 	const frontmatter = buildFrontmatter(json);
-	const body = turndown.turndown(json.text ?? "");
+	const body = turndown.turndown(bodyHtml);
 	const contents = `---\n${frontmatter}\n---\n${body}\n`;
 
 	await fs.writeFile(outputPath, contents, "utf8");
 	console.log(`${path.basename(jsonPath)} -> ${path.basename(outputPath)}`);
+	return null;
 }
 
 async function main(): Promise<void> {
 	const [inputDir, outputDir] = process.argv.slice(2);
 	if (!inputDir || !outputDir) {
 		console.error(
-			"Usage: tsx src/journey-to-obsidian.ts <input-dir> <output-dir>"
+			"Usage: tsx src/journey-to-obsidian-title-as-filename.ts <input-dir> <output-dir>"
 		);
 		process.exit(1);
 	}
@@ -131,11 +181,28 @@ async function main(): Promise<void> {
 
 	const turndown = new TurndownService({ headingStyle: "atx" });
 
+	const invalid: string[] = [];
 	for (const filename of jsonFiles) {
-		await convertEntry(path.join(inputDir, filename), outputDir, turndown);
+		const badName = await convertEntry(
+			path.join(inputDir, filename),
+			outputDir,
+			turndown
+		);
+		if (badName) invalid.push(`${filename} -> "${badName}"`);
 	}
 
-	console.log(`Converted ${jsonFiles.length} entries -> ${outputDir}`);
+	const written = jsonFiles.length - invalid.length;
+	console.log(`Converted ${written} entries -> ${outputDir}`);
+
+	if (invalid.length > 0) {
+		console.log(
+			`\n${invalid.length} entr${
+				invalid.length === 1 ? "y" : "ies"
+			} skipped due to invalid filename characters (${INVALID_FILENAME_CHARS.source}):`
+		);
+		for (const line of invalid) console.log(`  ${line}`);
+		process.exit(1);
+	}
 }
 
 void main();
