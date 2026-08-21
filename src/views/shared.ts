@@ -6,6 +6,12 @@ import {
 	TFile,
 	moment,
 } from "obsidian";
+import {
+	ImmichPhoto,
+	getPhotosForFile,
+	getPhotosForDateString,
+	getImmichDateAndTimezoneFields,
+} from "../immich";
 
 export function readFrontmatter(
 	app: App,
@@ -34,22 +40,60 @@ export function parseEntryDate(
 	return null;
 }
 
-export function allImmichHashes(
+/**
+ * New Immich Memories based helpers.
+ * Photos are fetched via getPhotosForDate using the memories plugin's configured date/timezone fields.
+ */
+
+export async function getPhotosForEntry(
 	app: App,
-	entry: BasesEntry,
-	imagesProp: string
-): string[] {
-	const raw = readFrontmatter(app, entry.file)?.[imagesProp];
-	if (!Array.isArray(raw)) return [];
-	return raw.filter((h): h is string => typeof h === "string");
+	entry: BasesEntry
+): Promise<ImmichPhoto[]> {
+	return getPhotosForFile(app, entry.file);
 }
 
-export function firstImmichHash(
+export async function getFirstPhotoForEntry(
 	app: App,
-	entry: BasesEntry,
-	imagesProp: string
-): string | undefined {
-	return allImmichHashes(app, entry, imagesProp)[0];
+	entry: BasesEntry
+): Promise<ImmichPhoto | undefined> {
+	const photos = await getPhotosForEntry(app, entry);
+	return photos[0];
+}
+
+export async function getPhotosForDate(
+	app: App,
+	dateStr: string,
+	timeZone?: string
+): Promise<ImmichPhoto[]> {
+	return getPhotosForDateString(app, dateStr, timeZone ?? "UTC");
+}
+
+/**
+ * Read timezone frontmatter value for an entry using memories plugin settings.
+ * Falls back to UTC.
+ */
+export function readTimezoneForEntry(
+	app: App,
+	entry: BasesEntry
+): string {
+	const fm = readFrontmatter(app, entry.file);
+	const { timezoneField } = getImmichDateAndTimezoneFields(app);
+	if (!fm) return "UTC";
+	const raw: unknown =
+		fm[timezoneField] ??
+		fm[timezoneField.toLowerCase()] ??
+		fm["timeZone"] ??
+		fm["timezone"];
+	if (raw == null) return "UTC";
+	if (raw instanceof Date) return "UTC";
+	if (typeof raw === "string") {
+		const trimmed = raw.trim();
+		return trimmed ? trimmed : "UTC";
+	}
+	if (typeof raw === "number" || typeof raw === "boolean") {
+		return String(raw);
+	}
+	return "UTC";
 }
 
 function stripFrontmatter(raw: string): string {
@@ -70,15 +114,9 @@ export async function renderEntryTextBlock(
 	app: App,
 	parent: HTMLElement,
 	file: TFile,
-	prefix: string,
 	component: Component
 ): Promise<HTMLElement> {
 	const block = parent.createDiv({ cls: "journal-text-block" });
-
-	block.createDiv({
-		cls: "journal-text-block-title",
-		text: entryTitle(file, prefix),
-	});
 
 	const body = block.createDiv({ cls: "journal-text-block-body" });
 	const raw = await app.vault.cachedRead(file);

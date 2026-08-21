@@ -37,14 +37,12 @@ class FolderSuggest extends AbstractInputSuggest<TFolder> {
 }
 
 export interface JournalPluginSettings {
-	immichImagesProperty: string;
 	journalDateProperty: string;
 	journalEntriesFolder: string;
 	journalPrefixProperty: string;
 }
 
 export const DEFAULT_SETTINGS: JournalPluginSettings = {
-	immichImagesProperty: "immichImages",
 	journalDateProperty: "journalDate",
 	journalEntriesFolder: "",
 	journalPrefixProperty: "Journal ",
@@ -80,21 +78,6 @@ export class JournalSettingTab extends PluginSettingTab {
 					void this.plugin.saveSettings();
 				});
 			});
-
-		new Setting(containerEl)
-			.setName("Immich images property")
-			.setDesc(
-				"Frontmatter property name holding the list of image asset hashes to look up coordinates for."
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("immichImages")
-					.setValue(this.plugin.settings.immichImagesProperty)
-					.onChange(async (value) => {
-						this.plugin.settings.immichImagesProperty = value;
-						await this.plugin.saveSettings();
-					})
-			);
 
 		new Setting(containerEl)
 			.setName("Entry date property")

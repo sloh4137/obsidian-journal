@@ -1,13 +1,7 @@
-import {
-	BasesEntry,
-	BasesView,
-	Component,
-	QueryController,
-} from "obsidian";
+import { BasesEntry, BasesView, Component, QueryController } from "obsidian";
 import type JournalPlugin from "../main";
-import { getImmichApi } from "../immich";
 import {
-	firstImmichHash,
+	getPhotosForEntry,
 	openEntry,
 	parseEntryDate,
 	renderEntryTextBlock,
@@ -95,28 +89,22 @@ export class EntriesBasesView extends BasesView {
 	}
 
 	private renderCard(entry: BasesEntry, parent: HTMLElement) {
-		const {
-			journalDateProperty,
-			immichImagesProperty,
-			journalPrefixProperty,
-		} = this.plugin.settings;
+		const { journalDateProperty } = this.plugin.settings;
 		const date = parseEntryDate(this.app, entry, journalDateProperty);
-		const hash = firstImmichHash(this.app, entry, immichImagesProperty);
 
 		const card = parent.createDiv({ cls: "journal-entry-card" });
 		card.addEventListener("click", () => {
 			void openEntry(this.app, entry.file);
 		});
 
-		const header = card.createDiv({ cls: "journal-entry-card-header" });
-		header.setText(
-			date
-				? date.format("MMM D, YYYY [|] dddd")
-				: entry.file.basename
-		);
+		if (date) {
+			const header = card.createDiv({ cls: "journal-entry-card-header" });
+			header.setText(date.format("MMM D, YYYY [|] dddd"));
+		}
 
 		const body = card.createDiv({ cls: "journal-entry-card-body" });
-		if (!hash) body.addClass("no-image");
+		// Default to no-image, will be removed if a photo is found
+		body.addClass("no-image");
 
 		const textEl = body.createDiv({ cls: "journal-entry-card-text" });
 		if (this.markdownComponent) {
@@ -124,17 +112,16 @@ export class EntriesBasesView extends BasesView {
 				this.app,
 				textEl,
 				entry.file,
-				journalPrefixProperty,
 				this.markdownComponent
 			);
 		}
 
-		if (hash) {
+		void getPhotosForEntry(this.app, entry).then((photos) => {
+			const first = photos[0];
+			if (!first) return;
+			body.removeClass("no-image");
 			const thumb = body.createDiv({ cls: "journal-entry-card-thumb" });
-			const api = getImmichApi(this.app);
-			void api?.resolveImageSrc(hash).then((src) => {
-				if (src) thumb.style.backgroundImage = `url("${src}")`;
-			});
-		}
+			thumb.style.backgroundImage = `url("${first.thumbnailUrl}")`;
+		});
 	}
 }

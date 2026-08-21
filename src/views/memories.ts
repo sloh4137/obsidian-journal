@@ -8,11 +8,12 @@ import {
 	moment,
 } from "obsidian";
 import type JournalPlugin from "../main";
-import { ImmichApi, getImmichApi } from "../immich";
+import type { ImmichPhoto } from "../immich";
+import { getPhotosForDateString } from "../immich";
 import {
-	allImmichHashes,
 	openEntry,
 	parseEntryDate,
+	readTimezoneForEntry,
 	renderEntryTextBlock,
 } from "./shared";
 
@@ -21,7 +22,9 @@ export const MEMORIES_VIEW_TYPE = "journal-memories";
 interface Period {
 	label: string;
 	entry: BasesEntry;
-	hashes: string[];
+	photos: ImmichPhoto[];
+	dateStr: string;
+	timeZone: string;
 }
 
 export class MemoriesBasesView extends BasesView {
@@ -38,46 +41,83 @@ export class MemoriesBasesView extends BasesView {
 	}
 
 	onDataUpdated(): void {
-		const { journalDateProperty, immichImagesProperty } = this.plugin.settings;
+		void (async () => {
+			const { journalDateProperty } = this.plugin.settings;
 
-		const byDay = new Map<string, BasesEntry>();
-		let oldest: moment.Moment | null = null;
-		for (const entry of this.data.data) {
-			const m = parseEntryDate(this.app, entry, journalDateProperty);
-			if (!m) continue;
-			byDay.set(m.format("YYYY-MM-DD"), entry);
-			if (!oldest || m.isBefore(oldest)) oldest = m.clone();
-		}
-
-		this.periods = [];
-		if (oldest) {
-			const today = moment().startOf("day");
-			const candidates: { label: string; date: moment.Moment }[] = [
-				{ label: "30 days ago", date: today.clone().subtract(30, "days") },
-			];
-			let years = 1;
-			while (true) {
-				const d = today.clone().subtract(years, "years");
-				if (d.isBefore(oldest, "day")) break;
-				candidates.push({
-					label: `${years} ${years === 1 ? "year" : "years"} ago`,
-					date: d,
-				});
-				years++;
+			const byDay = new Map<string, BasesEntry>();
+			let oldest: moment.Moment | null = null;
+			for (const entry of this.data.data) {
+				const m = parseEntryDate(this.app, entry, journalDateProperty);
+				if (!m) continue;
+				byDay.set(m.format("YYYY-MM-DD"), entry);
+				if (!oldest || m.isBefore(oldest)) oldest = m.clone();
 			}
 
-			for (const c of candidates) {
-				const entry = byDay.get(c.date.format("YYYY-MM-DD"));
-				if (!entry) continue;
-				this.periods.push({
-					label: c.label,
-					entry,
-					hashes: allImmichHashes(this.app, entry, immichImagesProperty),
-				});
-			}
-		}
+			this.periods = [];
+			if (oldest) {
+				const today = moment().startOf("day");
+				const candidates: { label: string; date: moment.Moment }[] = [
+					{
+						label: "30 days ago",
+						date: today.clone().subtract(30, "days"),
+					},
+				];
+				let years = 1;
+				while (true) {
+					const d = today.clone().subtract(years, "years");
+					if (d.isBefore(oldest, "day")) break;
+					candidates.push({
+						label: `${years} ${years === 1 ? "year" : "years"} ago`,
+						date: d,
+					});
+					years++;
+				}
 
-		this.render();
+				const results: Period[] = [];
+				await Promise.all(
+					candidates.map(async (c) => {
+						const dateStr = c.date.format("YYYY-MM-DD");
+						const entry = byDay.get(dateStr);
+						if (!entry) return;
+						const tz = readTimezoneForEntry(this.app, entry);
+						try {
+							const photos = await getPhotosForDateString(
+								this.app,
+								dateStr,
+								tz
+							);
+							results.push({
+								label: c.label,
+								entry,
+								photos,
+								dateStr,
+								timeZone: tz,
+								// keep original candidate ordering via date
+								// We'll sort after
+								_order: c.date.valueOf(),
+							} as Period & { _order: number });
+						} catch {
+							// If fetching fails, still include entry with empty photos so text can be shown
+							results.push({
+								label: c.label,
+								entry,
+								photos: [],
+								dateStr,
+								timeZone: tz,
+								_order: c.date.valueOf(),
+							} as Period & { _order: number });
+						}
+					})
+				);
+				// Restore candidate order (30 days ago first, then 1y, 2y...)
+				(results as (Period & { _order: number })[]).sort(
+					(a, b) => b._order - a._order
+				);
+				this.periods = results;
+			}
+
+			this.render();
+		})();
 	}
 
 	private render() {
@@ -95,29 +135,26 @@ export class MemoriesBasesView extends BasesView {
 		const carousel = this.containerEl.createDiv({
 			cls: "journal-memories-carousel",
 		});
-		const api = getImmichApi(this.app);
 		this.periods.forEach((period, index) => {
-			this.renderCard(carousel, period, index, api);
+			this.renderCard(carousel, period, index);
 		});
 	}
 
-	private renderCard(
-		parent: HTMLElement,
-		period: Period,
-		index: number,
-		api: ImmichApi | null
-	) {
+	private renderCard(parent: HTMLElement, period: Period, index: number) {
 		const card = parent.createDiv({ cls: "journal-memories-card" });
 		card.addEventListener("click", () => {
-			new MemoriesModal(this.app, this.plugin, this.periods, index).open();
+			new MemoriesModal(
+				this.app,
+				this.plugin,
+				this.periods,
+				index
+			).open();
 		});
 
 		const media = card.createDiv({ cls: "journal-memories-card-media" });
-		const hash = period.hashes[0];
-		if (hash && api) {
-			void api.resolveImageSrc(hash).then((src) => {
-				if (src) media.style.backgroundImage = `url("${src}")`;
-			});
+		const first = period.photos[0];
+		if (first) {
+			media.style.backgroundImage = `url("${first.thumbnailUrl}")`;
 		} else {
 			media.addClass("empty");
 		}
@@ -131,7 +168,7 @@ export class MemoriesBasesView extends BasesView {
 
 interface Slide {
 	period: Period;
-	hash: string | null;
+	photo: ImmichPhoto | null;
 }
 
 class MemoriesModal extends Modal {
@@ -152,11 +189,11 @@ class MemoriesModal extends Modal {
 			const period = periods[i];
 			if (!period) continue;
 			if (i === startPeriod) startIndex = this.slides.length;
-			if (period.hashes.length === 0) {
-				this.slides.push({ period, hash: null });
+			if (period.photos.length === 0) {
+				this.slides.push({ period, photo: null });
 			} else {
-				for (const hash of period.hashes) {
-					this.slides.push({ period, hash });
+				for (const photo of period.photos) {
+					this.slides.push({ period, photo });
 				}
 			}
 		}
@@ -208,22 +245,22 @@ class MemoriesModal extends Modal {
 		const media = this.stageEl.createDiv({ cls: "journal-memories-media" });
 		this.attachGestures(media);
 
-		const prefix = this.plugin.settings.journalPrefixProperty;
-
-		if (slide.hash) {
+		if (slide.photo) {
 			const img = media.createEl("img", { cls: "journal-memories-img" });
-			const api = getImmichApi(this.app);
-			void api?.resolveImageSrc(slide.hash).then((src) => {
-				if (src) img.src = src;
-			});
+			// Prefer preview for HEIC handling, fallback to fullsize then thumbnail
+			img.src =
+				slide.photo.previewUrl ||
+				slide.photo.fullsizeUrl ||
+				slide.photo.thumbnailUrl;
 		} else {
 			media.addClass("text-only");
-			const text = media.createDiv({ cls: "journal-memories-text-slide" });
+			const text = media.createDiv({
+				cls: "journal-memories-text-slide",
+			});
 			void renderEntryTextBlock(
 				this.app,
 				text,
 				slide.period.entry.file,
-				prefix,
 				this.slideComponent
 			);
 		}
@@ -238,12 +275,13 @@ class MemoriesModal extends Modal {
 			this.close();
 		});
 
-		const lines = openPanel.createDiv({ cls: "journal-memories-open-lines" });
+		const lines = openPanel.createDiv({
+			cls: "journal-memories-open-lines",
+		});
 		void renderEntryTextBlock(
 			this.app,
 			lines,
 			slide.period.entry.file,
-			prefix,
 			this.slideComponent
 		);
 		openPanel.createDiv({

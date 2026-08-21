@@ -8,12 +8,7 @@ import {
 	moment,
 } from "obsidian";
 import type JournalPlugin from "../main";
-import { getImmichApi } from "../immich";
-import {
-	firstImmichHash,
-	openEntry,
-	parseEntryDate,
-} from "./shared";
+import { openEntry, parseEntryDate, getPhotosForEntry } from "./shared";
 
 export const CALENDAR_VIEW_TYPE = "journal-calendar";
 
@@ -137,18 +132,12 @@ export class CalendarBasesView extends BasesView {
 			cell.addEventListener("click", () => {
 				void openEntry(this.app, entry.file);
 			});
-			const hash = firstImmichHash(
-				this.app,
-				entry,
-				this.plugin.settings.immichImagesProperty
-			);
-			if (hash) {
+			void getPhotosForEntry(this.app, entry).then((photos) => {
+				const first = photos[0];
+				if (!first) return;
 				cell.addClass("has-image");
-				const api = getImmichApi(this.app);
-				void api?.resolveImageSrc(hash).then((src) => {
-					if (src) cell.style.backgroundImage = `url("${src}")`;
-				});
-			}
+				cell.style.backgroundImage = `url("${first.thumbnailUrl}")`;
+			});
 		}
 
 		cell.createDiv({ cls: "journal-calendar-day-num", text: String(day.date()) });

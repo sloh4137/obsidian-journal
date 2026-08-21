@@ -6,7 +6,6 @@ timeZone: <% Intl.DateTimeFormat().resolvedOptions().timeZone %>
 coordinates:
 sentiment:
 isFavorite:
-immichImages:
 tags:
     - "#journal"
 cssclasses:
