@@ -171,7 +171,9 @@ export default class JournalPlugin extends Plugin {
 		if (!date) return;
 
 		const dateProperty = this.settings.journalDateProperty;
-		const currentDate = this.extractDate(cache?.frontmatter?.[dateProperty]);
+		const currentDate = this.extractDate(
+			cache?.frontmatter?.[dateProperty]
+		);
 		if (currentDate !== date) {
 			await this.app.fileManager.processFrontMatter(
 				file,
