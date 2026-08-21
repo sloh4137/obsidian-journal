@@ -5,8 +5,12 @@ import {
 	Modal,
 	QueryController,
 	Setting,
-	moment,
+	moment as obsidianMoment,
 } from "obsidian";
+// eslint-disable-next-line no-restricted-imports
+import type { Moment } from "moment";
+
+const moment = obsidianMoment as unknown as typeof import("moment");
 import type JournalPlugin from "../main";
 import { openEntry, parseEntryDate, getPhotosForEntry } from "./shared";
 
@@ -18,7 +22,7 @@ export class CalendarBasesView extends BasesView {
 	type = CALENDAR_VIEW_TYPE;
 
 	private byDay = new Map<string, BasesEntry>();
-	private viewedMonth: moment.Moment = moment().startOf("month");
+	private viewedMonth: Moment = moment().startOf("month");
 
 	constructor(
 		controller: QueryController,
@@ -115,8 +119,8 @@ export class CalendarBasesView extends BasesView {
 
 	private renderDay(
 		grid: HTMLElement,
-		day: moment.Moment,
-		monthStart: moment.Moment
+		day: Moment,
+		monthStart: Moment
 	) {
 		const inMonth = day.isSame(monthStart, "month");
 		const key = day.format("YYYY-MM-DD");
@@ -160,8 +164,8 @@ class JumpToDateModal extends Modal {
 
 	constructor(
 		app: App,
-		current: moment.Moment,
-		private onSubmit: (m: moment.Moment) => void
+		current: Moment,
+		private onSubmit: (m: Moment) => void
 	) {
 		super(app);
 		this.selectedMonth = current.month();

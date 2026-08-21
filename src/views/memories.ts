@@ -5,8 +5,12 @@ import {
 	Component,
 	Modal,
 	QueryController,
-	moment,
+	moment as obsidianMoment,
 } from "obsidian";
+// eslint-disable-next-line no-restricted-imports
+import type { Moment } from "moment";
+
+const moment = obsidianMoment as unknown as typeof import("moment");
 import type JournalPlugin from "../main";
 import type { ImmichPhoto } from "../immich";
 import { getPhotosForDateString } from "../immich";
@@ -45,7 +49,7 @@ export class MemoriesBasesView extends BasesView {
 			const { journalDateProperty } = this.plugin.settings;
 
 			const byDay = new Map<string, BasesEntry>();
-			let oldest: moment.Moment | null = null;
+			let oldest: Moment | null = null;
 			for (const entry of this.data.data) {
 				const m = parseEntryDate(this.app, entry, journalDateProperty);
 				if (!m) continue;
@@ -56,7 +60,7 @@ export class MemoriesBasesView extends BasesView {
 			this.periods = [];
 			if (oldest) {
 				const today = moment().startOf("day");
-				const candidates: { label: string; date: moment.Moment }[] = [
+				const candidates: { label: string; date: Moment }[] = [
 					{
 						label: "30 days ago",
 						date: today.clone().subtract(30, "days"),

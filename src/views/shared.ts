@@ -4,8 +4,12 @@ import {
 	Component,
 	MarkdownRenderer,
 	TFile,
-	moment,
+	moment as obsidianMoment,
 } from "obsidian";
+// eslint-disable-next-line no-restricted-imports
+import type { Moment } from "moment";
+
+const moment = obsidianMoment as unknown as typeof import("moment");
 import {
 	ImmichPhoto,
 	getPhotosForFile,
@@ -26,7 +30,7 @@ export function parseEntryDate(
 	app: App,
 	entry: BasesEntry,
 	dateProp: string
-): moment.Moment | null {
+): Moment | null {
 	const raw = readFrontmatter(app, entry.file)?.[dateProp];
 	if (raw == null) return null;
 	if (raw instanceof Date) {

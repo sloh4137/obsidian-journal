@@ -4,8 +4,10 @@ import {
 	Notice,
 	Plugin,
 	TFile,
-	moment,
+	moment as obsidianMoment,
 } from "obsidian";
+
+const moment = obsidianMoment as unknown as typeof import("moment");
 import {
 	DEFAULT_SETTINGS,
 	JournalPluginSettings,
@@ -24,7 +26,7 @@ import { CALENDAR_VIEW_TYPE, CalendarBasesView } from "./views/calendar";
 import { MEMORIES_VIEW_TYPE, MemoriesBasesView } from "./views/memories";
 
 export default class JournalPlugin extends Plugin {
-	settings: JournalPluginSettings;
+	settings!: JournalPluginSettings;
 
 	async onload() {
 		await this.loadSettings();
@@ -172,8 +174,9 @@ export default class JournalPlugin extends Plugin {
 	}
 
 	async setCoordinatesFromImmich(file: TFile) {
-		const { dateField, timezoneField } =
-			getImmichDateAndTimezoneFields(this.app);
+		const { dateField, timezoneField } = getImmichDateAndTimezoneFields(
+			this.app
+		);
 
 		const api = getImmichMemoriesApi(this.app);
 		if (!api) {
