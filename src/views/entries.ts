@@ -1,11 +1,13 @@
 import { BasesEntry, BasesView, Component, QueryController } from "obsidian";
 import type JournalPlugin from "../main";
 import {
+	createLazyObserver,
 	entryTitle,
 	getPhotosForEntry,
 	openEntry,
 	parseEntryDate,
 	renderEntryTextBlock,
+	setThumbnail,
 } from "./shared";
 
 export const ENTRIES_VIEW_TYPE = "journal-entries";
@@ -18,6 +20,7 @@ export class EntriesBasesView extends BasesView {
 	private listEl: HTMLElement | null = null;
 	private sentinelEl: HTMLElement | null = null;
 	private observer: IntersectionObserver | null = null;
+	private lazy: ReturnType<typeof createLazyObserver> | null = null;
 	private sorted: BasesEntry[] = [];
 	private rendered = 0;
 	private markdownComponent: Component | null = null;
@@ -33,6 +36,8 @@ export class EntriesBasesView extends BasesView {
 	onunload() {
 		this.observer?.disconnect();
 		this.observer = null;
+		this.lazy?.disconnect();
+		this.lazy = null;
 		this.markdownComponent?.unload();
 		this.markdownComponent = null;
 		super.onunload();
@@ -43,16 +48,17 @@ export class EntriesBasesView extends BasesView {
 		this.markdownComponent = new Component();
 		this.markdownComponent.load();
 		const dateProp = this.plugin.settings.journalDateProperty;
-		const entries = this.data.data.slice();
-		entries.sort((a, b) => {
-			const ad = parseEntryDate(this.app, a, dateProp);
-			const bd = parseEntryDate(this.app, b, dateProp);
-			if (!ad && !bd) return 0;
-			if (!ad) return 1;
-			if (!bd) return -1;
-			return bd.valueOf() - ad.valueOf();
+		const decorated = this.data.data.map((entry) => ({
+			entry,
+			ts: parseEntryDate(this.app, entry, dateProp)?.valueOf() ?? null,
+		}));
+		decorated.sort((a, b) => {
+			if (a.ts === null && b.ts === null) return 0;
+			if (a.ts === null) return 1;
+			if (b.ts === null) return -1;
+			return b.ts - a.ts;
 		});
-		this.sorted = entries;
+		this.sorted = decorated.map((d) => d.entry);
 		this.rendered = 0;
 
 		this.containerEl.empty();
@@ -62,12 +68,18 @@ export class EntriesBasesView extends BasesView {
 			cls: "journal-entries-sentinel",
 		});
 
+		this.lazy?.disconnect();
+		this.lazy = createLazyObserver();
+
 		this.observer?.disconnect();
-		this.observer = new IntersectionObserver((entries) => {
-			for (const e of entries) {
-				if (e.isIntersecting) this.renderNextPage();
-			}
-		});
+		this.observer = new IntersectionObserver(
+			(entries) => {
+				for (const e of entries) {
+					if (e.isIntersecting) this.renderNextPage();
+				}
+			},
+			{ rootMargin: "600px" }
+		);
 		this.observer.observe(this.sentinelEl);
 
 		this.renderNextPage();
@@ -116,21 +128,31 @@ export class EntriesBasesView extends BasesView {
 		body.addClass("no-image");
 
 		const textEl = body.createDiv({ cls: "journal-entry-card-text" });
-		if (this.markdownComponent) {
-			void renderEntryTextBlock(
-				this.app,
-				textEl,
-				entry.file,
-				this.markdownComponent
-			);
-		}
 
-		void getPhotosForEntry(this.app, entry).then((photos) => {
-			const first = photos[0];
-			if (!first) return;
-			body.removeClass("no-image");
-			const thumb = body.createDiv({ cls: "journal-entry-card-thumb" });
-			thumb.style.backgroundImage = `url("${first.thumbnailUrl}")`;
+		this.lazy?.observe(card, () => {
+			const component = this.markdownComponent;
+			if (component) {
+				void renderEntryTextBlock(
+					this.app,
+					textEl,
+					entry.file,
+					component
+				);
+			}
+			void getPhotosForEntry(this.app, entry).then((photos) => {
+					const first = photos[0];
+					if (!first) return;
+					const thumb = body.createDiv({
+						cls: "journal-entry-card-thumb",
+					});
+					const url =
+						first.previewUrl ||
+						first.fullsizeUrl ||
+						first.thumbnailUrl;
+					setThumbnail(thumb, url, () =>
+						body.removeClass("no-image")
+					);
+				});
 		});
 	}
 }

@@ -124,12 +124,21 @@
 }
 
 .journal-entry-card-thumb {
+	position: relative;
 	flex: 1;
 	aspect-ratio: 1 / 1;
 	border-radius: 8px;
-	background-size: cover;
-	background-position: center;
+	overflow: hidden;
 	background-color: var(--background-modifier-border);
+}
+
+.journal-thumb {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
 }
 
 .journal-calendar-view {
@@ -185,8 +194,6 @@
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 6px;
 	background-color: transparent;
-	background-size: cover;
-	background-position: center;
 	cursor: default;
 	overflow: hidden;
 }
@@ -257,10 +264,10 @@
 }
 
 .journal-memories-card-media {
+	position: relative;
 	width: 100%;
 	height: 100%;
-	background-size: cover;
-	background-position: center;
+	overflow: hidden;
 }
 
 .journal-memories-card-media.empty {
@@ -299,7 +306,8 @@
 }
 
 .journal-memories-modal .modal-close-button {
-	display: none;
+	color: white;
+	z-index: 4;
 }
 
 .journal-memories-modal .modal-content {
@@ -309,20 +317,44 @@
 	overflow: hidden;
 }
 
-.journal-memories-close {
+/* Stories-style progress indicator */
+.journal-memories-progress {
 	position: absolute;
-	top: 12px;
-	right: 12px;
-	z-index: 2;
-	width: 36px;
-	height: 36px;
-	border-radius: 50%;
-	background: rgba(0, 0, 0, 0.55);
-	color: white;
-	font-size: 1.4em;
-	line-height: 1;
-	border: none;
-	cursor: pointer;
+	top: 8px;
+	left: 12px;
+	right: 56px;
+	z-index: 4;
+	display: flex;
+	gap: 4px;
+	pointer-events: none;
+}
+
+.journal-memories-progress-bar {
+	flex: 1;
+	height: 3px;
+	border-radius: 2px;
+	background: rgba(255, 255, 255, 0.35);
+	overflow: hidden;
+	position: relative;
+}
+
+.journal-memories-progress-fill {
+	position: absolute;
+	inset: 0;
+	background: white;
+	opacity: 0;
+	transform: scaleX(0);
+	transform-origin: left;
+}
+
+.journal-memories-progress-bar.past .journal-memories-progress-fill,
+.journal-memories-progress-bar.active .journal-memories-progress-fill {
+	opacity: 1;
+	transform: scaleX(1);
+}
+
+.journal-memories-progress-bar.future .journal-memories-progress-fill {
+	opacity: 0;
 }
 
 .journal-memories-stage {
@@ -342,10 +374,33 @@
 }
 
 .journal-memories-label {
-	padding: 14px 18px;
+	padding: 32px 18px 14px;
+	font-weight: 600;
+	background: linear-gradient(to bottom, rgba(0, 0, 0, 0.65), transparent);
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.journal-memories-title {
+	font-weight: 700;
+	font-size: 1.1em;
+	line-height: 1.2;
+	color: white;
+}
+
+.journal-memories-label-main {
 	font-weight: 600;
 	font-size: 1.05em;
-	background: linear-gradient(to bottom, rgba(0, 0, 0, 0.65), transparent);
+	color: white;
+}
+
+.journal-memories-label-sub {
+	font-weight: 400;
+	font-size: 0.8em;
+	opacity: 0.8;
+	color: rgba(255, 255, 255, 0.85);
+	margin-top: 1px;
 }
 
 .journal-memories-media {

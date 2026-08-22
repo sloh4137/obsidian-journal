@@ -15,10 +15,12 @@ import type JournalPlugin from "../main";
 import type { ImmichPhoto } from "../immich";
 import { getPhotosForDateString } from "../immich";
 import {
+	entryTitle,
 	openEntry,
 	parseEntryDate,
 	readTimezoneForEntry,
 	renderEntryTextBlock,
+	setThumbnail,
 } from "./shared";
 
 export const MEMORIES_VIEW_TYPE = "journal-memories";
@@ -35,6 +37,7 @@ export class MemoriesBasesView extends BasesView {
 	type = MEMORIES_VIEW_TYPE;
 
 	private periods: Period[] = [];
+	private mediaEls = new Map<Period, HTMLElement>();
 
 	constructor(
 		controller: QueryController,
@@ -45,88 +48,79 @@ export class MemoriesBasesView extends BasesView {
 	}
 
 	onDataUpdated(): void {
-		void (async () => {
-			const { journalDateProperty } = this.plugin.settings;
+		const { journalDateProperty } = this.plugin.settings;
 
-			const byDay = new Map<string, BasesEntry>();
-			let oldest: Moment | null = null;
-			for (const entry of this.data.data) {
-				const m = parseEntryDate(this.app, entry, journalDateProperty);
-				if (!m) continue;
-				byDay.set(m.format("YYYY-MM-DD"), entry);
-				if (!oldest || m.isBefore(oldest)) oldest = m.clone();
+		const byDay = new Map<string, BasesEntry>();
+		let oldest: Moment | null = null;
+		for (const entry of this.data.data) {
+			const m = parseEntryDate(this.app, entry, journalDateProperty);
+			if (!m) continue;
+			byDay.set(m.format("YYYY-MM-DD"), entry);
+			if (!oldest || m.isBefore(oldest)) oldest = m.clone();
+		}
+
+		this.periods = [];
+		if (oldest) {
+			const today = moment().startOf("day");
+			const candidates: { label: string; date: Moment }[] = [
+				{
+					label: "30 days ago",
+					date: today.clone().subtract(30, "days"),
+				},
+			];
+			let years = 1;
+			while (true) {
+				const d = today.clone().subtract(years, "years");
+				if (d.isBefore(oldest, "day")) break;
+				candidates.push({
+					label: `${years} ${years === 1 ? "year" : "years"} ago`,
+					date: d,
+				});
+				years++;
 			}
 
-			this.periods = [];
-			if (oldest) {
-				const today = moment().startOf("day");
-				const candidates: { label: string; date: Moment }[] = [
-					{
-						label: "30 days ago",
-						date: today.clone().subtract(30, "days"),
-					},
-				];
-				let years = 1;
-				while (true) {
-					const d = today.clone().subtract(years, "years");
-					if (d.isBefore(oldest, "day")) break;
-					candidates.push({
-						label: `${years} ${years === 1 ? "year" : "years"} ago`,
-						date: d,
-					});
-					years++;
-				}
-
-				const results: Period[] = [];
-				await Promise.all(
-					candidates.map(async (c) => {
-						const dateStr = c.date.format("YYYY-MM-DD");
-						const entry = byDay.get(dateStr);
-						if (!entry) return;
-						const tz = readTimezoneForEntry(this.app, entry);
-						try {
-							const photos = await getPhotosForDateString(
-								this.app,
-								dateStr,
-								tz
-							);
-							results.push({
-								label: c.label,
-								entry,
-								photos,
-								dateStr,
-								timeZone: tz,
-								// keep original candidate ordering via date
-								// We'll sort after
-								_order: c.date.valueOf(),
-							} as Period & { _order: number });
-						} catch {
-							// If fetching fails, still include entry with empty photos so text can be shown
-							results.push({
-								label: c.label,
-								entry,
-								photos: [],
-								dateStr,
-								timeZone: tz,
-								_order: c.date.valueOf(),
-							} as Period & { _order: number });
-						}
-					})
-				);
-				// Restore candidate order (30 days ago first, then 1y, 2y...)
-				(results as (Period & { _order: number })[]).sort(
-					(a, b) => b._order - a._order
-				);
-				this.periods = results;
+			for (const c of candidates) {
+				const dateStr = c.date.format("YYYY-MM-DD");
+				const entry = byDay.get(dateStr);
+				if (!entry) continue;
+				this.periods.push({
+					label: c.label,
+					entry,
+					photos: [],
+					dateStr,
+					timeZone: readTimezoneForEntry(this.app, entry),
+				});
 			}
+		}
 
-			this.render();
-		})();
+		this.render();
+		this.loadPhotos();
+	}
+
+	private loadPhotos() {
+		for (const period of this.periods) {
+			void getPhotosForDateString(
+				this.app,
+				period.dateStr,
+				period.timeZone
+			)
+				.catch(() => [] as ImmichPhoto[])
+				.then((photos) => {
+					period.photos = photos;
+					const first = photos[0];
+					const media = this.mediaEls.get(period);
+					if (!first || !media) return;
+					setThumbnail(media, first.thumbnailUrl, () =>
+						media.removeClass("empty")
+					);
+				});
+		}
 	}
 
 	private render() {
 		this.containerEl.empty();
 		this.containerEl.addClass("journal-memories-view");
+		this.mediaEls.clear();
 
 		if (this.periods.length === 0) {
 			this.containerEl.createDiv({
@@ -156,9 +150,10 @@ export class MemoriesBasesView extends BasesView {
 		});
 
 		const media = card.createDiv({ cls: "journal-memories-card-media" });
+		this.mediaEls.set(period, media);
 		const first = period.photos[0];
 		if (first) {
-			media.style.backgroundImage = `url("${first.thumbnailUrl}")`;
+			setThumbnail(media, first.thumbnailUrl);
 		} else {
 			media.addClass("empty");
 		}
@@ -179,6 +174,7 @@ class MemoriesModal extends Modal {
 	private slides: Slide[] = [];
 	private index = 0;
 	private stageEl!: HTMLElement;
+	private progressTrackEl!: HTMLElement;
 	private slideComponent = new Component();
 
 	constructor(
@@ -209,18 +205,10 @@ class MemoriesModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
+		this.progressTrackEl = contentEl.createDiv({
+			cls: "journal-memories-progress",
+		});
 		this.stageEl = contentEl.createDiv({ cls: "journal-memories-stage" });
-
-		const closeBtn = contentEl.createEl("button", {
-			cls: "journal-memories-close",
-			text: "×",
-			attr: { "aria-label": "Close" },
-		});
-		closeBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
-		closeBtn.addEventListener("click", (e) => {
-			e.stopPropagation();
-			this.close();
-		});
 
 		this.renderSlide();
 	}
@@ -228,6 +216,20 @@ class MemoriesModal extends Modal {
 	onClose() {
 		this.slideComponent.unload();
 		this.contentEl.empty();
+	}
+
+	private renderProgress() {
+		if (!this.progressTrackEl) return;
+		this.progressTrackEl.empty();
+		this.slides.forEach((_, i) => {
+			const bar = this.progressTrackEl.createDiv({
+				cls: "journal-memories-progress-bar",
+			});
+			if (i < this.index) bar.addClass("past");
+			else if (i === this.index) bar.addClass("active");
+			else bar.addClass("future");
+			bar.createDiv({ cls: "journal-memories-progress-fill" });
+		});
 	}
 
 	private renderSlide() {
@@ -241,10 +243,38 @@ class MemoriesModal extends Modal {
 			return;
 		}
 
-		this.stageEl.createDiv({
+		this.renderProgress();
+
+		const title = entryTitle(
+			slide.period.entry.file,
+			this.plugin.settings.journalPrefixProperty
+		);
+		const dayOfWeek = moment(slide.period.dateStr, "YYYY-MM-DD").format(
+			"dddd"
+		);
+
+		const header = this.stageEl.createDiv({
 			cls: "journal-memories-label",
+		});
+
+		if (title) {
+			header.createDiv({
+				cls: "journal-memories-title",
+				text: title,
+			});
+		}
+
+		header.createDiv({
+			cls: "journal-memories-label-main",
 			text: slide.period.label,
 		});
+
+		if (dayOfWeek) {
+			header.createDiv({
+				cls: "journal-memories-label-sub",
+				text: dayOfWeek,
+			});
+		}
 
 		const media = this.stageEl.createDiv({ cls: "journal-memories-media" });
 		this.attachGestures(media);
@@ -265,7 +295,8 @@ class MemoriesModal extends Modal {
 				this.app,
 				text,
 				slide.period.entry.file,
-				this.slideComponent
+				this.slideComponent,
+				200
 			);
 		}
 

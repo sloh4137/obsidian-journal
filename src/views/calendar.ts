@@ -12,7 +12,13 @@ import type { Moment } from "moment";
 
 const moment = obsidianMoment as unknown as typeof import("moment");
 import type JournalPlugin from "../main";
-import { openEntry, parseEntryDate, getPhotosForEntry } from "./shared";
+import {
+	createLazyObserver,
+	getPhotosForEntry,
+	openEntry,
+	parseEntryDate,
+	setThumbnail,
+} from "./shared";
 
 export const CALENDAR_VIEW_TYPE = "journal-calendar";
 
@@ -23,6 +29,9 @@ export class CalendarBasesView extends BasesView {
 
 	private byDay = new Map<string, BasesEntry>();
 	private viewedMonth: Moment = moment().startOf("month");
+	private lazy: ReturnType<typeof createLazyObserver> | null = null;
+	private thumbUrls = new Map<string, string | null>();
+	private signature: string | null = null;
 
 	constructor(
 		controller: QueryController,
@@ -34,10 +43,10 @@ export class CalendarBasesView extends BasesView {
 
 	onDataUpdated(): void {
 		const dateProp = this.plugin.settings.journalDateProperty;
-		this.byDay.clear();
+		const byDay = new Map<string, BasesEntry>();
 		for (const entry of this.data.data) {
 			const m = parseEntryDate(this.app, entry, dateProp);
-			if (m) this.byDay.set(m.format("YYYY-MM-DD"), entry);
+			if (m) byDay.set(m.format("YYYY-MM-DD"), entry);
 		}
 
 		const stored = this.config.get(MONTH_KEY);
@@ -46,12 +55,34 @@ export class CalendarBasesView extends BasesView {
 			if (parsed.isValid()) this.viewedMonth = parsed.startOf("month");
 		}
 
+		this.byDay = byDay;
+
+		// Bases re-fires this on unrelated vault changes; rebuilding the grid
+		// every time visibly flashes the whole month.
+		if (this.computeSignature() === this.signature) return;
 		this.render();
 	}
 
+	private computeSignature(): string {
+		return [
+			this.viewedMonth.format("YYYY-MM"),
+			...[...this.byDay].map(([day, entry]) => `${day}=${entry.file.path}`),
+		].join("|");
+	}
+
+	onunload() {
+		this.lazy?.disconnect();
+		this.lazy = null;
+		super.onunload();
+	}
+
 	private render() {
+		this.signature = this.computeSignature();
 		this.containerEl.empty();
 		this.containerEl.addClass("journal-calendar-view");
+
+		this.lazy?.disconnect();
+		this.lazy = createLazyObserver();
 
 		this.renderToolbar(this.containerEl);
 		this.renderGrid(this.containerEl);
@@ -136,12 +167,26 @@ export class CalendarBasesView extends BasesView {
 			cell.addEventListener("click", () => {
 				void openEntry(this.app, entry.file);
 			});
-			void getPhotosForEntry(this.app, entry).then((photos) => {
-				const first = photos[0];
-				if (!first) return;
-				cell.addClass("has-image");
-				cell.style.backgroundImage = `url("${first.thumbnailUrl}")`;
-			});
+			const path = entry.file.path;
+			const cached = this.thumbUrls.get(path);
+			if (cached !== undefined) {
+				// Re-render (month nav, data refresh): paint from the known URL
+				// instead of round-tripping through Immich again.
+				if (cached) {
+					setThumbnail(cell, cached, () => cell.addClass("has-image"));
+				}
+			} else {
+				this.lazy?.observe(cell, () => {
+					void getPhotosForEntry(this.app, entry).then((photos) => {
+						const url = photos[0]?.thumbnailUrl ?? null;
+						this.thumbUrls.set(path, url);
+						if (!url) return;
+						setThumbnail(cell, url, () =>
+							cell.addClass("has-image")
+						);
+					});
+				});
+			}
 		}
 
 		cell.createDiv({ cls: "journal-calendar-day-num", text: String(day.date()) });

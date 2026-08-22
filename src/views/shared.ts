@@ -126,11 +126,67 @@ export function entryTitle(file: TFile, prefix?: string): string {
 	return name;
 }
 
+export function createLazyObserver(rootMargin = "300px"): {
+	observe(el: HTMLElement, fn: () => void): void;
+	disconnect(): void;
+} {
+	const callbacks = new WeakMap<Element, () => void>();
+	const observer = new IntersectionObserver(
+		(entries) => {
+			for (const e of entries) {
+				if (!e.isIntersecting) continue;
+				const fn = callbacks.get(e.target);
+				callbacks.delete(e.target);
+				observer.unobserve(e.target);
+				fn?.();
+			}
+		},
+		{ rootMargin }
+	);
+	return {
+		observe(el, fn) {
+			callbacks.set(el, fn);
+			observer.observe(el);
+		},
+		disconnect() {
+			observer.disconnect();
+		},
+	};
+}
+
+/**
+ * Inserts a covering thumbnail only once it has decoded, so the container goes
+ * straight from its placeholder to the photo in one paint instead of flashing
+ * an intermediate state. Does nothing if the image fails to load.
+ */
+export function setThumbnail(
+	parent: HTMLElement,
+	url: string,
+	onReady?: () => void
+): void {
+	const img = new Image();
+	img.addClass("journal-thumb");
+	img.decoding = "async";
+	img.src = url;
+	const insert = () => {
+		parent.prepend(img);
+		onReady?.();
+	};
+	if (img.complete) {
+		insert();
+		return;
+	}
+	img.decode().then(insert, () => {
+		/* broken image: leave the placeholder in place */
+	});
+}
+
 export async function renderEntryTextBlock(
 	app: App,
 	parent: HTMLElement,
 	file: TFile,
-	component: Component
+	component: Component,
+	maxLines = 10
 ): Promise<HTMLElement> {
 	const block = parent.createDiv({ cls: "journal-text-block" });
 
@@ -138,7 +194,7 @@ export async function renderEntryTextBlock(
 	const raw = await app.vault.cachedRead(file);
 	const stripped = stripFrontmatter(raw).trim();
 	if (stripped) {
-		const truncated = stripped.split("\n").slice(0, 200).join("\n");
+		const truncated = stripped.split("\n").slice(0, maxLines).join("\n");
 		await MarkdownRenderer.render(
 			app,
 			truncated,
