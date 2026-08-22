@@ -200,6 +200,16 @@ class MemoriesModal extends Modal {
 		this.index = startIndex;
 	}
 
+	private handleKeyDown = (e: KeyboardEvent) => {
+		if (e.key === "ArrowLeft") {
+			e.preventDefault();
+			this.advance(-1);
+		} else if (e.key === "ArrowRight") {
+			e.preventDefault();
+			this.advance(1);
+		}
+	};
+
 	onOpen() {
 		this.modalEl.addClass("journal-memories-modal");
 		const { contentEl } = this;
@@ -210,10 +220,13 @@ class MemoriesModal extends Modal {
 		});
 		this.stageEl = contentEl.createDiv({ cls: "journal-memories-stage" });
 
+		window.addEventListener("keydown", this.handleKeyDown);
+
 		this.renderSlide();
 	}
 
 	onClose() {
+		window.removeEventListener("keydown", this.handleKeyDown);
 		this.slideComponent.unload();
 		this.contentEl.empty();
 	}
@@ -221,7 +234,7 @@ class MemoriesModal extends Modal {
 	private renderProgress() {
 		if (!this.progressTrackEl) return;
 		this.progressTrackEl.empty();
-		this.slides.forEach((_, i) => {
+		this.slides.forEach((slide, i) => {
 			const bar = this.progressTrackEl.createDiv({
 				cls: "journal-memories-progress-bar",
 			});
@@ -229,6 +242,16 @@ class MemoriesModal extends Modal {
 			else if (i === this.index) bar.addClass("active");
 			else bar.addClass("future");
 			bar.createDiv({ cls: "journal-memories-progress-fill" });
+
+			// Insert separator between different memories (different periods)
+			if (i < this.slides.length - 1) {
+				const next = this.slides[i + 1];
+				if (next && next.period.dateStr !== slide.period.dateStr) {
+					this.progressTrackEl.createDiv({
+						cls: "journal-memories-progress-sep",
+					});
+				}
+			}
 		});
 	}
 
@@ -257,13 +280,6 @@ class MemoriesModal extends Modal {
 			cls: "journal-memories-label",
 		});
 
-		if (title) {
-			header.createDiv({
-				cls: "journal-memories-title",
-				text: title,
-			});
-		}
-
 		header.createDiv({
 			cls: "journal-memories-label-main",
 			text: slide.period.label,
@@ -288,6 +304,12 @@ class MemoriesModal extends Modal {
 				slide.photo.thumbnailUrl;
 		} else {
 			media.addClass("text-only");
+			if (title) {
+				media.createDiv({
+					cls: "journal-memories-text-top-title",
+					text: title,
+				});
+			}
 			const text = media.createDiv({
 				cls: "journal-memories-text-slide",
 			});
@@ -309,6 +331,13 @@ class MemoriesModal extends Modal {
 			void openEntry(this.app, slide.period.entry.file);
 			this.close();
 		});
+
+		if (slide.photo && title) {
+			openPanel.createDiv({
+				cls: "journal-memories-open-title",
+				text: title,
+			});
+		}
 
 		const lines = openPanel.createDiv({
 			cls: "journal-memories-open-lines",
@@ -346,7 +375,7 @@ class MemoriesModal extends Modal {
 			const absX = Math.abs(dx);
 			const absY = Math.abs(dy);
 
-			if (absY > SWIPE && -dy > absX) {
+			if (absY > SWIPE && Math.abs(dy) > absX) {
 				this.close();
 				return;
 			}
@@ -355,7 +384,15 @@ class MemoriesModal extends Modal {
 				else this.advance(-1);
 				return;
 			}
-			this.advance(1);
+
+			// Tap: left side goes back, right side goes forward
+			const rect = target.getBoundingClientRect();
+			const midX = rect.left + rect.width / 2;
+			if (e.clientX < midX) {
+				this.advance(-1);
+			} else {
+				this.advance(1);
+			}
 		});
 	}
 

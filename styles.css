@@ -326,6 +326,7 @@
 	z-index: 4;
 	display: flex;
 	gap: 4px;
+	align-items: center;
 	pointer-events: none;
 }
 
@@ -357,6 +358,30 @@
 	opacity: 0;
 }
 
+.journal-memories-progress-sep {
+	flex: 0 0 14px;
+	width: 14px;
+	height: 3px;
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.journal-memories-progress-sep::after {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: white;
+	display: block;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+}
+
 .journal-memories-stage {
 	display: flex;
 	flex-direction: column;
@@ -374,7 +399,7 @@
 }
 
 .journal-memories-label {
-	padding: 32px 18px 14px;
+	padding: 36px 18px 14px;
 	font-weight: 600;
 	background: linear-gradient(to bottom, rgba(0, 0, 0, 0.65), transparent);
 	display: flex;
@@ -390,17 +415,19 @@
 }
 
 .journal-memories-label-main {
-	font-weight: 600;
-	font-size: 1.05em;
+	font-weight: 700;
+	font-size: 1.6em;
+	line-height: 1.15;
 	color: white;
+	letter-spacing: -0.01em;
 }
 
 .journal-memories-label-sub {
 	font-weight: 400;
-	font-size: 0.8em;
-	opacity: 0.8;
+	font-size: 0.85em;
+	opacity: 0.85;
 	color: rgba(255, 255, 255, 0.85);
-	margin-top: 1px;
+	margin-top: 2px;
 }
 
 .journal-memories-media {
@@ -423,27 +450,45 @@
 
 .journal-memories-media.text-only {
 	padding: 24px;
-	align-items: stretch;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 12px;
+}
+
+.journal-memories-text-top-title {
+	font-weight: 800;
+	font-size: 1.6em;
+	line-height: 1.2;
+	color: white;
+	text-align: center;
+	width: 100%;
+	padding: 0 16px;
+	white-space: normal;
+	overflow: hidden;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
 }
 
 .journal-memories-text-slide {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
-	text-align: center;
+	text-align: left;
 	width: 80%;
 	margin: 0 auto;
 	overflow: hidden;
 }
 
 .journal-memories-open-panel {
-	padding: 14px 18px;
+	padding: 12px 18px 16px;
 	cursor: pointer;
 	background: rgba(0, 0, 0, 0.55);
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
-	max-height: 30vh;
+	gap: 4px;
+	max-height: 34vh;
 	overflow: hidden;
 	flex: 0 0 auto;
 }
@@ -452,28 +497,45 @@
 	background: rgba(0, 0, 0, 0.7);
 }
 
+.journal-memories-open-title {
+	font-weight: 800;
+	font-size: 1.35em;
+	line-height: 1.25;
+	color: white;
+	text-align: center;
+	width: 100%;
+	white-space: normal;
+	overflow: hidden;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+}
+
 .journal-memories-open-lines {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: 2px;
 	font-size: 0.95em;
-	opacity: 0.95;
+	opacity: 0.9;
 	min-height: 0;
 	overflow: hidden;
+	margin-top: 2px;
 }
 
 .journal-memories-open-cta {
 	flex: 0 0 auto;
-}
-
-.journal-memories-open-cta {
-	font-size: 0.85em;
+	font-size: 1.18em;
+	font-weight: 700;
+	letter-spacing: 0.01em;
 	color: var(--interactive-accent);
-	font-weight: 600;
-	margin-top: 4px;
+	margin-top: 10px;
+	text-align: center;
+	width: 100%;
 }
 
 .journal-memories-media.text-only + .journal-memories-open-panel
-	.journal-memories-open-lines {
+	.journal-memories-open-lines,
+.journal-memories-media.text-only + .journal-memories-open-panel
+	.journal-memories-open-title {
 	display: none;
 }
