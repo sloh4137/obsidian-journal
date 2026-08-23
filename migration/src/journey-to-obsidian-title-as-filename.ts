@@ -145,7 +145,20 @@ async function convertEntry(
 
 	// Colons are invalid in filenames: "1:1" reads better as "1-1"; any other
 	// colon becomes ")".
-	baseName = baseName.replace(/1:1/g, "1-1").replace(/:/g, ")");
+	let prevBaseName = baseName;
+	baseName = baseName
+		.replace(/1:1/g, "1-1")
+		.replace(/:/g, ")")
+		.replace(/\?/, "")
+		.replace(/\//, "-");
+	while (prevBaseName != baseName) {
+		prevBaseName = baseName;
+		baseName = baseName
+			.replace(/1:1/g, "1-1")
+			.replace(/:/g, ")")
+			.replace(/\?/, "")
+			.replace(/\//, "-");
+	}
 
 	if (INVALID_FILENAME_CHARS.test(baseName)) {
 		return baseName;
@@ -155,7 +168,9 @@ async function convertEntry(
 
 	// When the leading <h1> becomes the note title, drop it from the body so it
 	// isn't duplicated.
-	const bodyHtml = title ? (json.text ?? "").replace(LEADING_H1, "") : json.text ?? "";
+	const bodyHtml = title
+		? (json.text ?? "").replace(LEADING_H1, "")
+		: json.text ?? "";
 
 	const frontmatter = buildFrontmatter(json);
 	const body = turndown.turndown(bodyHtml);
@@ -198,7 +213,9 @@ async function main(): Promise<void> {
 		console.log(
 			`\n${invalid.length} entr${
 				invalid.length === 1 ? "y" : "ies"
-			} skipped due to invalid filename characters (${INVALID_FILENAME_CHARS.source}):`
+			} skipped due to invalid filename characters (${
+				INVALID_FILENAME_CHARS.source
+			}):`
 		);
 		for (const line of invalid) console.log(`  ${line}`);
 		process.exit(1);
