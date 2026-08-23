@@ -83,6 +83,7 @@
 .journal-entry-card-title {
 	font-weight: 600;
 	margin-bottom: 8px;
+	font-size: 1.75em;
 	color: var(--text-normal);
 	overflow: hidden;
 	text-overflow: ellipsis;
