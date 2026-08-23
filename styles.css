@@ -83,11 +83,17 @@
 .journal-entry-card-title {
 	font-weight: 600;
 	margin-bottom: 8px;
-	font-size: 1.75em;
+	font-size: 1.5em;
 	color: var(--text-normal);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+	.journal-entry-card-title {
+		font-size: 1.75em;
+	}
 }
 
 .journal-entry-card-body {
@@ -233,7 +239,7 @@
 .journal-memories-view {
 	padding: 12px;
 	height: 100%;
-	overflow: hidden;
+	overflow-y: auto;
 }
 
 .journal-memories-empty {
@@ -243,24 +249,18 @@
 }
 
 .journal-memories-carousel {
-	display: flex;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 	gap: 12px;
-	overflow-x: auto;
-	overflow-y: hidden;
-	padding-bottom: 8px;
-	scroll-snap-type: x mandatory;
-	height: 100%;
 }
 
 .journal-memories-card {
 	position: relative;
-	flex: 0 0 auto;
-	width: 180px;
+	width: 100%;
 	height: 270px;
 	border-radius: 12px;
 	overflow: hidden;
 	cursor: pointer;
-	scroll-snap-align: start;
 	background: var(--background-secondary);
 }
 
