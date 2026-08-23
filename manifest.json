@@ -1,7 +1,7 @@
 {
 	"id": "obsidian-journal",
 	"name": "Journal ",
-	"version": "1.0.7",
+	"version": "1.0.8",
 	"minAppVersion": "0.15.0",
 	"description": "Opionated journaling plugin for Obsidian that follows Journey's approach to journaling.",
 	"isDesktopOnly": false
