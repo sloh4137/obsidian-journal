@@ -236,6 +236,59 @@
 	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 
+.journal-calendar-day-count {
+	position: absolute;
+	bottom: 4px;
+	right: 6px;
+	font-size: 0.8em;
+	font-weight: 700;
+	line-height: 1;
+	padding: 3px 7px;
+	border-radius: 999px;
+	color: white;
+	background: rgba(0, 0, 0, 0.6);
+	z-index: 1;
+}
+
+.journal-day-entries-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	max-height: 60vh;
+	overflow-y: auto;
+}
+
+.journal-day-entries-item {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 10px 12px;
+	background: var(--background-secondary);
+	cursor: pointer;
+}
+
+.journal-day-entries-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.journal-day-entries-title {
+	font-weight: 600;
+	margin-bottom: 4px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.journal-day-entries-preview {
+	color: var(--text-muted);
+	font-size: 0.9em;
+	max-height: calc(1.4em * 4);
+	overflow: hidden;
+}
+
+.journal-day-entries-preview img {
+	display: none;
+}
+
 .journal-memories-view {
 	padding: 12px;
 	height: 100%;

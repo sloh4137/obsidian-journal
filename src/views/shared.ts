@@ -181,12 +181,29 @@ export function setThumbnail(
 	});
 }
 
+const IMAGE_EXTENSIONS = "png|jpe?g|gif|bmp|svg|webp|heic|heif|avif|tiff?";
+
+/**
+ * Remove image markup from markdown so previews stay text-only.
+ * Covers inline images, Obsidian image embeds, and raw <img> tags.
+ */
+export function stripImages(markdown: string): string {
+	return markdown
+		.replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+		.replace(
+			new RegExp(`!\\[\\[[^\\]]+\\.(${IMAGE_EXTENSIONS})(\\|[^\\]]*)?\\]\\]`, "gi"),
+			""
+		)
+		.replace(/<img\b[^>]*>/gi, "");
+}
+
 export async function renderEntryTextBlock(
 	app: App,
 	parent: HTMLElement,
 	file: TFile,
 	component: Component,
-	maxLines = 10
+	maxLines = 10,
+	options?: { stripImages?: boolean }
 ): Promise<HTMLElement> {
 	const block = parent.createDiv({ cls: "journal-text-block" });
 
@@ -194,7 +211,8 @@ export async function renderEntryTextBlock(
 	const raw = await app.vault.cachedRead(file);
 	const stripped = stripFrontmatter(raw).trim();
 	if (stripped) {
-		const truncated = stripped.split("\n").slice(0, maxLines).join("\n");
+		let truncated = stripped.split("\n").slice(0, maxLines).join("\n");
+		if (options?.stripImages) truncated = stripImages(truncated);
 		await MarkdownRenderer.render(
 			app,
 			truncated,

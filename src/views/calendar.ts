@@ -2,6 +2,7 @@ import {
 	App,
 	BasesEntry,
 	BasesView,
+	Component,
 	Modal,
 	QueryController,
 	Setting,
@@ -14,9 +15,11 @@ const moment = obsidianMoment as unknown as typeof import("moment");
 import type JournalPlugin from "../main";
 import {
 	createLazyObserver,
+	entryTitle,
 	getPhotosForEntry,
 	openEntry,
 	parseEntryDate,
+	renderEntryTextBlock,
 	setThumbnail,
 } from "./shared";
 
@@ -27,7 +30,7 @@ const MONTH_KEY = "viewedMonth";
 export class CalendarBasesView extends BasesView {
 	type = CALENDAR_VIEW_TYPE;
 
-	private byDay = new Map<string, BasesEntry>();
+	private byDay = new Map<string, BasesEntry[]>();
 	private viewedMonth: Moment = moment().startOf("month");
 	private lazy: ReturnType<typeof createLazyObserver> | null = null;
 	private thumbUrls = new Map<string, string | null>();
@@ -43,10 +46,14 @@ export class CalendarBasesView extends BasesView {
 
 	onDataUpdated(): void {
 		const dateProp = this.plugin.settings.journalDateProperty;
-		const byDay = new Map<string, BasesEntry>();
+		const byDay = new Map<string, BasesEntry[]>();
 		for (const entry of this.data.data) {
 			const m = parseEntryDate(this.app, entry, dateProp);
-			if (m) byDay.set(m.format("YYYY-MM-DD"), entry);
+			if (!m) continue;
+			const key = m.format("YYYY-MM-DD");
+			const list = byDay.get(key);
+			if (list) list.push(entry);
+			else byDay.set(key, [entry]);
 		}
 
 		const stored = this.config.get(MONTH_KEY);
@@ -66,7 +73,9 @@ export class CalendarBasesView extends BasesView {
 	private computeSignature(): string {
 		return [
 			this.viewedMonth.format("YYYY-MM"),
-			...[...this.byDay].map(([day, entry]) => `${day}=${entry.file.path}`),
+			...[...this.byDay].map(
+				([day, entries]) => `${day}=${entries.map((e) => e.file.path).join(",")}`
+			),
 		].join("|");
 	}
 
@@ -155,20 +164,28 @@ export class CalendarBasesView extends BasesView {
 	) {
 		const inMonth = day.isSame(monthStart, "month");
 		const key = day.format("YYYY-MM-DD");
-		const entry = this.byDay.get(key);
+		const entries = this.byDay.get(key);
 		const isToday = day.isSame(moment(), "day");
 
 		const cell = grid.createDiv({ cls: "journal-calendar-day" });
 		if (!inMonth) cell.addClass("muted");
 		if (isToday) cell.addClass("today");
 
-		if (entry) {
+		if (entries && entries.length > 0) {
 			cell.addClass("has-entry");
 			cell.addEventListener("click", () => {
-				void openEntry(this.app, entry.file);
+				if (entries.length === 1 && entries[0]) {
+					void openEntry(this.app, entries[0].file);
+				} else {
+					new DayEntriesModal(
+						this.app,
+						this.plugin,
+						day.clone(),
+						entries
+					).open();
+				}
 			});
-			const path = entry.file.path;
-			const cached = this.thumbUrls.get(path);
+			const cached = this.thumbUrls.get(key);
 			if (cached !== undefined) {
 				// Re-render (month nav, data refresh): paint from the known URL
 				// instead of round-tripping through Immich again.
@@ -177,14 +194,29 @@ export class CalendarBasesView extends BasesView {
 				}
 			} else {
 				this.lazy?.observe(cell, () => {
-					void getPhotosForEntry(this.app, entry).then((photos) => {
-						const url = photos[0]?.thumbnailUrl ?? null;
-						this.thumbUrls.set(path, url);
-						if (!url) return;
-						setThumbnail(cell, url, () =>
-							cell.addClass("has-image")
-						);
-					});
+					void (async () => {
+						for (const entry of entries) {
+							const photos = await getPhotosForEntry(
+								this.app,
+								entry
+							);
+							const url = photos[0]?.thumbnailUrl ?? null;
+							if (url) {
+								this.thumbUrls.set(key, url);
+								setThumbnail(cell, url, () =>
+									cell.addClass("has-image")
+								);
+								return;
+							}
+						}
+						this.thumbUrls.set(key, null);
+					})();
+				});
+			}
+			if (entries.length > 1) {
+				cell.createDiv({
+					cls: "journal-calendar-day-count",
+					text: String(entries.length),
 				});
 			}
 		}
@@ -200,6 +232,70 @@ export class CalendarBasesView extends BasesView {
 
 	private persistMonth() {
 		this.config.set(MONTH_KEY, this.viewedMonth.format("YYYY-MM"));
+	}
+}
+
+class DayEntriesModal extends Modal {
+	private component = new Component();
+
+	constructor(
+		app: App,
+		private plugin: JournalPlugin,
+		private day: Moment,
+		private entries: BasesEntry[]
+	) {
+		super(app);
+	}
+
+	onOpen() {
+		this.component.load();
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.addClass("journal-day-entries-modal");
+		contentEl.createEl("h2", {
+			text: this.day.format("MMM D, YYYY"),
+		});
+
+		const list = contentEl.createDiv({
+			cls: "journal-day-entries-list",
+		});
+		for (const entry of this.entries) {
+			const item = list.createDiv({
+				cls: "journal-day-entries-item",
+			});
+			item.addEventListener("click", () => {
+				void openEntry(this.app, entry.file);
+				this.close();
+			});
+			const title = entryTitle(
+				entry.file,
+				this.plugin.settings.journalPrefixProperty
+			);
+			if (title) {
+				item.createDiv({
+					cls: "journal-day-entries-title",
+					text: title,
+				});
+			}
+			const preview = item.createDiv({
+				cls: "journal-day-entries-preview",
+			});
+			// Same-day entries share the same photos, so keep the
+		// picker preview text-only instead of repeating images.
+		void renderEntryTextBlock(
+				this.app,
+				preview,
+				entry.file,
+				this.component,
+				4,
+				{ stripImages: true }
+			);
+		}
+	}
+
+	onClose() {
+		this.component.unload();
+		this.contentEl.empty();
 	}
 }
 
